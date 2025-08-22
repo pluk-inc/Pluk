@@ -104,7 +104,7 @@ We use labels to categorize and prioritize issues:
 
 - 🌐 **Website**: [pluk.sh](https://www.pluk.sh/)
 - 📝 **Join Waitlist**: [pluk.sh](https://www.pluk.sh)
-- 🐦 **Twitter**: [@PlukApp](https://twitter.com/PlukApp)
+- 🐦 **Twitter**: [@pluk_sh](https://x.com/pluk_sh)
 
 ## 🤝 Contributing
 
