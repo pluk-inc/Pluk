@@ -8,8 +8,8 @@
   
   [![Website](https://img.shields.io/badge/Website-pluk.sh-blue)](https://www.pluk.sh/)
   [![Waitlist](https://img.shields.io/badge/Join-Waitlist-orange)](https://www.pluk.sh/waitlist)
-  [![Issues](https://img.shields.io/github/issues/your-username/pluk)](https://github.com/your-username/pluk/issues)
-  [![License](https://img.shields.io/github/license/your-username/pluk)](LICENSE)
+  [![Issues](https://img.shields.io/github/issues/pluk-inc/pluk)](https://github.com/pluk-inc/pluk/issues)
+  [![License](https://img.shields.io/github/license/pluk-inc/pluk)](LICENSE)
   
   <img src="./assets/hero-screenshot.png" alt="Pluk Hero Screenshot" width="800">
 </div>
@@ -48,9 +48,9 @@ Pluk is a powerful, native macOS database client that revolutionizes how you int
 
 | Database | Version | Features |
 |----------|---------|----------|
-| **MongoDB** | 3.6+ | Collections, Aggregation |
+| **MongoDB** | 3.6+ | Collections |
 | **PostgreSQL** | 9.6+ | Full SQL, JSON |
-| **MySQL** | 5.7+ | Full SQL, Stored Procedures |
+| **MySQL** | 5.7+ | Full SQL |
 | **SQLite** | 3.8+ | Local files |
 
 ## 📋 Issue Tracking
@@ -65,13 +65,13 @@ Before submitting a bug report, please:
 <!-- 2. **Check our [FAQ](https://www.pluk.sh/faq)** for common solutions -->
 2. **Provide detailed information** using our bug report template
 
-[**🐛 Report a Bug**](https://github.com/your-username/pluk/issues/new?template=bug_report.md)
+[**🐛 Report a Bug**](https://github.com/pluk-inc/pluk/issues/new?template=bug_report.md)
 
 ### 💡 Feature Requests
 
 Have an idea to improve Pluk? We'd love to hear it!
 
-[**💡 Request a Feature**](https://github.com/your-username/pluk/issues/new?template=feature_request.md)
+[**💡 Request a Feature**](https://github.com/pluk-inc/pluk/issues/new?template=feature_request.md)
 
 ### 📝 Issue Templates
 
@@ -122,6 +122,6 @@ While this repository is primarily for issue tracking, we welcome:
   <p>Made with ❤️ for the developer community</p>
   <p>
     <a href="https://www.pluk.sh/">Website</a> •
-    <a href="https://github.com/your-username/pluk/issues">Issues</a>
+    <a href="https://github.com/pluk-inc/pluk/issues">Issues</a>
   </p>
 </div>
