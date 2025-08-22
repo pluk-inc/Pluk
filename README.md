@@ -7,9 +7,8 @@
   *AI does the querying, you explore your data* ✨
   
   [![Website](https://img.shields.io/badge/Website-pluk.sh-blue)](https://www.pluk.sh/)
-  [![Waitlist](https://img.shields.io/badge/Join-Waitlist-orange)](https://www.pluk.sh/waitlist)
+  [![Waitlist](https://img.shields.io/badge/Join-Waitlist-orange)](https://www.pluk.sh)
   [![Issues](https://img.shields.io/github/issues/pluk-inc/pluk)](https://github.com/pluk-inc/pluk/issues)
-  [![License](https://img.shields.io/github/license/pluk-inc/pluk)](LICENSE)
   
   <img src="./assets/hero-screenshot.png" alt="Pluk Hero Screenshot" width="800">
 </div>
