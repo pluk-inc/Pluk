@@ -341,6 +341,241 @@ struct QueryResult: Sendable {
     }
 }
 
+// MARK: - Redis Models
+
+/// A Redis key whose original bytes are retained even when they are not valid UTF-8.
+public struct RedisKey: Identifiable, Hashable, Sendable, Codable {
+    public let bytes: Data
+
+    public init(bytes: Data) {
+        self.bytes = bytes
+    }
+
+    public init(_ string: String) {
+        self.bytes = Data(string.utf8)
+    }
+
+    public var id: Data { bytes }
+    public var utf8String: String? { String(data: bytes, encoding: .utf8) }
+
+    public var displayString: String {
+        utf8String ?? "0x" + bytes.map { String(format: "%02x", $0) }.joined()
+    }
+}
+
+public enum RedisKeyType: Hashable, Sendable, Codable {
+    case none
+    case string
+    case hash
+    case list
+    case set
+    case sortedSet
+    case stream
+    case json
+    case unknown(String)
+
+    public init(serverName: String) {
+        switch serverName.lowercased() {
+        case "none": self = .none
+        case "string": self = .string
+        case "hash": self = .hash
+        case "list": self = .list
+        case "set": self = .set
+        case "zset": self = .sortedSet
+        case "stream": self = .stream
+        case "json", "rejson-rl": self = .json
+        default: self = .unknown(serverName)
+        }
+    }
+
+    /// The value accepted by SCAN TYPE for built-in Redis data types.
+    public var scanFilter: String? {
+        switch self {
+        case .none: nil
+        case .string: "string"
+        case .hash: "hash"
+        case .list: "list"
+        case .set: "set"
+        case .sortedSet: "zset"
+        case .stream: "stream"
+        case .json: "ReJSON-RL"
+        case .unknown(let value): value
+        }
+    }
+
+    public var displayName: String {
+        switch self {
+        case .none: "None"
+        case .string: "String"
+        case .hash: "Hash"
+        case .list: "List"
+        case .set: "Set"
+        case .sortedSet: "Sorted Set"
+        case .stream: "Stream"
+        case .json: "JSON"
+        case .unknown(let value): value
+        }
+    }
+}
+
+public struct RedisScanPage: Equatable, Sendable {
+    /// Redis SCAN cursors are opaque unsigned 64-bit values.
+    public let nextCursor: UInt64
+    public let keys: [RedisKey]
+
+    public init(nextCursor: UInt64, keys: [RedisKey]) {
+        self.nextCursor = nextCursor
+        self.keys = keys
+    }
+
+    public var isComplete: Bool { nextCursor == 0 }
+}
+
+public struct RedisKeyMetadata: Equatable, Sendable {
+    public let key: RedisKey
+    public let type: RedisKeyType
+    /// Remaining lifetime in milliseconds. `nil` means the key is persistent.
+    public let ttlMilliseconds: Int64?
+    public let memoryUsageBytes: Int64?
+    public let encoding: String?
+
+    public init(
+        key: RedisKey,
+        type: RedisKeyType,
+        ttlMilliseconds: Int64?,
+        memoryUsageBytes: Int64?,
+        encoding: String?
+    ) {
+        self.key = key
+        self.type = type
+        self.ttlMilliseconds = ttlMilliseconds
+        self.memoryUsageBytes = memoryUsageBytes
+        self.encoding = encoding
+    }
+
+    public var exists: Bool { type != .none }
+}
+
+public struct RedisValuePage: Equatable, Sendable {
+    public let offset: Int
+    public let count: Int
+    public let cursor: UInt64
+
+    public init(offset: Int = 0, count: Int = 200, cursor: UInt64 = 0) {
+        self.offset = max(0, offset)
+        self.count = min(max(1, count), 10_000)
+        self.cursor = cursor
+    }
+}
+
+public struct RedisHashEntry: Equatable, Sendable {
+    public let field: Data
+    public let value: Data
+
+    public init(field: Data, value: Data) {
+        self.field = field
+        self.value = value
+    }
+}
+
+public struct RedisSortedSetEntry: Equatable, Sendable {
+    public let member: Data
+    public let score: Double
+
+    public init(member: Data, score: Double) {
+        self.member = member
+        self.score = score
+    }
+}
+
+public struct RedisStreamEntry: Equatable, Sendable {
+    public let id: Data
+    public let fields: [RedisHashEntry]
+
+    public init(id: Data, fields: [RedisHashEntry]) {
+        self.id = id
+        self.fields = fields
+    }
+}
+
+public enum RedisValue: Equatable, Sendable {
+    case none
+    case string(Data)
+    case hash(entries: [RedisHashEntry], totalCount: Int, nextCursor: UInt64)
+    case list(elements: [Data], totalCount: Int, offset: Int)
+    case set(members: [Data], totalCount: Int, nextCursor: UInt64)
+    case sortedSet(entries: [RedisSortedSetEntry], totalCount: Int, offset: Int)
+    case stream(entries: [RedisStreamEntry], totalCount: Int)
+    case json(Data)
+    case unsupported(type: RedisKeyType, raw: RedisCommandValue)
+}
+
+public enum RedisValueUpdate: Equatable, Sendable {
+    case string(Data)
+    case json(Data)
+    case hashField(field: Data, value: Data)
+    case deleteHashField(field: Data)
+    case listElement(index: Int, value: Data)
+    case appendList(values: [Data], toHead: Bool)
+    case setMember(Data, isPresent: Bool)
+    /// A nil score removes the member.
+    case sortedSetMember(member: Data, score: Double?)
+    case appendStream(fields: [RedisHashEntry], id: Data?)
+    case deleteStreamEntry(id: Data)
+}
+
+/// A binary-safe Redis command. The first argument is the command name.
+public struct RedisCommand: Equatable, Sendable {
+    public let arguments: [Data]
+
+    public init(arguments: [Data]) {
+        self.arguments = arguments
+    }
+
+    public init(arguments: [String]) {
+        self.arguments = arguments.map { Data($0.utf8) }
+    }
+}
+
+public struct RedisCommandMapEntry: Equatable, Sendable {
+    public let key: RedisCommandValue
+    public let value: RedisCommandValue
+
+    public init(key: RedisCommandValue, value: RedisCommandValue) {
+        self.key = key
+        self.value = value
+    }
+}
+
+/// A lossless, binary-safe representation of a RESP3 response.
+public indirect enum RedisCommandValue: Equatable, Sendable {
+    case null
+    case simpleString(Data)
+    case bulkString(Data)
+    case simpleError(Data)
+    case bulkError(Data)
+    case verbatimString(format: String?, data: Data)
+    case integer(Int64)
+    case double(Double)
+    case boolean(Bool)
+    case bigNumber(Data)
+    case array([RedisCommandValue])
+    case map([RedisCommandMapEntry])
+    case set([RedisCommandValue])
+    case push([RedisCommandValue])
+    case attribute([RedisCommandMapEntry])
+}
+
+public struct RedisCommandResult: Equatable, Sendable {
+    public let value: RedisCommandValue
+    public let durationMilliseconds: Double
+
+    public init(value: RedisCommandValue, durationMilliseconds: Double) {
+        self.value = value
+        self.durationMilliseconds = durationMilliseconds
+    }
+}
+
 // MARK: - Database Driver Protocol
 protocol DatabaseDriver: Actor {
     associatedtype Database: DatabaseWrapper
@@ -379,6 +614,17 @@ protocol DatabaseDriver: Actor {
     // Raw Query Execution
     @discardableResult
     func executeRawQuery(_ query: String, databaseSchema: String?) async throws -> [QueryResult]
+
+    // Redis operations. Non-Redis drivers use the default unsupported implementations below.
+    func scanRedisKeys(cursor: UInt64, pattern: String?, type: RedisKeyType?, count: Int) async throws -> RedisScanPage
+    func redisKeyMetadata(for key: RedisKey) async throws -> RedisKeyMetadata
+    func redisValue(for key: RedisKey, page: RedisValuePage) async throws -> RedisValue
+    func updateRedisValue(_ update: RedisValueUpdate, for key: RedisKey, preserveTTL: Bool) async throws
+    func renameRedisKey(_ key: RedisKey, to newKey: RedisKey, overwrite: Bool) async throws
+    func deleteRedisKeys(_ keys: [RedisKey], asynchronously: Bool) async throws -> Int
+    func setRedisExpiration(for key: RedisKey, milliseconds: Int64?) async throws -> Bool
+    func executeRedisCommand(_ command: RedisCommand) async throws -> RedisCommandResult
+    func parseRedisCommand(_ commandText: String) async throws -> RedisCommand
     
     func getSchema(for collectionName: String, schema: String?) async throws -> DatabaseSchemaResult?
     func getInformationSchema() async throws -> [InformationSchema]
@@ -487,6 +733,42 @@ extension DatabaseDriver {
     // Only databases with schema caching will override this
     func clearSchemaCache(for tableName: String, schema: String?) async {
         // Default implementation does nothing
+    }
+
+    func scanRedisKeys(cursor: UInt64, pattern: String?, type: RedisKeyType?, count: Int) async throws -> RedisScanPage {
+        throw DatabaseError.notImplemented("Redis key scanning is only available for Redis connections")
+    }
+
+    func redisKeyMetadata(for key: RedisKey) async throws -> RedisKeyMetadata {
+        throw DatabaseError.notImplemented("Redis metadata is only available for Redis connections")
+    }
+
+    func redisValue(for key: RedisKey, page: RedisValuePage) async throws -> RedisValue {
+        throw DatabaseError.notImplemented("Redis values are only available for Redis connections")
+    }
+
+    func updateRedisValue(_ update: RedisValueUpdate, for key: RedisKey, preserveTTL: Bool) async throws {
+        throw DatabaseError.notImplemented("Redis value editing is only available for Redis connections")
+    }
+
+    func renameRedisKey(_ key: RedisKey, to newKey: RedisKey, overwrite: Bool) async throws {
+        throw DatabaseError.notImplemented("Redis key renaming is only available for Redis connections")
+    }
+
+    func deleteRedisKeys(_ keys: [RedisKey], asynchronously: Bool) async throws -> Int {
+        throw DatabaseError.notImplemented("Redis key deletion is only available for Redis connections")
+    }
+
+    func setRedisExpiration(for key: RedisKey, milliseconds: Int64?) async throws -> Bool {
+        throw DatabaseError.notImplemented("Redis expiration is only available for Redis connections")
+    }
+
+    func executeRedisCommand(_ command: RedisCommand) async throws -> RedisCommandResult {
+        throw DatabaseError.notImplemented("Redis commands are only available for Redis connections")
+    }
+
+    func parseRedisCommand(_ commandText: String) async throws -> RedisCommand {
+        throw DatabaseError.notImplemented("Redis commands are only available for Redis connections")
     }
 
 
@@ -870,6 +1152,8 @@ class DatabaseDriverFactory {
             return MySQLDriver()
         case .sqlite:
             return SQLiteDriver()
+        case .redis:
+            return RedisDriver()
         }
     }
 }

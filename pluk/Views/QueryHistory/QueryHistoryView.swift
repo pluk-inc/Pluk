@@ -103,8 +103,13 @@ struct QueryHistoryView: View {
         historyEntries = []
     }
 
-    private func reExecuteQuery(_ query: String) {
-        instance.createSQLEditorTab(withQuery: query)
+    private func reExecuteQuery(_ entry: QueryHistoryEntryViewModel) {
+        guard entry.isReplayable else { return }
+        if instance.connection.databaseType == .redis {
+            instance.createRedisCommandTab(withCommand: entry.query)
+        } else {
+            instance.createSQLEditorTab(withQuery: entry.query)
+        }
     }
 
     @ViewBuilder
@@ -117,10 +122,19 @@ struct QueryHistoryView: View {
         }
 
         Button {
-            reExecuteQuery(entry.query)
+            reExecuteQuery(entry)
         } label: {
-            Label("Load in Editor", systemImage: "arrow.up.forward.square")
+            Label(
+                entry.isReplayable ? "Load in Editor" : "Load in Editor (Credentials Redacted)",
+                systemImage: "arrow.up.forward.square"
+            )
         }
+        .disabled(!entry.isReplayable)
+        .help(
+            entry.isReplayable
+                ? "Load this query in an editor"
+                : "Credentials were redacted. Copy the command and re-enter them before running it."
+        )
 
         Divider()
 
@@ -297,7 +311,7 @@ struct QueryHistoryFilterBar: View {
 
 struct QueryHistoryRow: View {
     let entry: QueryHistoryEntryViewModel
-    var onReExecute: (String) -> Void
+    var onReExecute: (QueryHistoryEntryViewModel) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -354,7 +368,8 @@ struct QueryHistoryRow: View {
         .background(Color.clear)
         .contentShape(Rectangle())
         .onTapGesture(count: 2) {
-            onReExecute(entry.query)
+            guard entry.isReplayable else { return }
+            onReExecute(entry)
         }
     }
 
@@ -382,6 +397,7 @@ struct QueryHistoryRow: View {
         .background(Color.orange.opacity(0.15))
         .foregroundStyle(.orange)
         .clipShape(.capsule)
+        .help("Credentials were redacted. Copy the command and re-enter them before running it.")
     }
 
     private var failedBadge: some View {

@@ -524,7 +524,7 @@ final class EmptyStateViewController: NSViewController, NSTextFieldDelegate {
 
             switch event.keyCode {
             case 17 where event.modifierFlags.contains(.command):
-                self.instance.createSQLEditorTab()
+                self.instance.createEditorTab()
                 return nil
             default:
                 break

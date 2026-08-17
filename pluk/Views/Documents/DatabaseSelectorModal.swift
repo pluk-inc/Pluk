@@ -23,12 +23,7 @@ struct DatabaseSelectorModal: View {
 
     private var supportsCreateDatabase: Bool {
         guard let databaseType else { return false }
-        switch databaseType {
-        case .postgres, .mysql, .mongodb, .supabase:
-            return true
-        case .sqlite, .convex:
-            return false
-        }
+        return databaseType.supportsDatabaseCreation
     }
 
     var filteredDatabases: [DatabaseWrapper] {

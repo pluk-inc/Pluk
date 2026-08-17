@@ -20,7 +20,7 @@
 
 ---
 
-> Connect PostgreSQL, MySQL, MariaDB, MongoDB, SQLite, or Convex and work with the data in one focused Mac app — no Electron, no browser tabs, no context switching.
+> Connect PostgreSQL, MySQL, MariaDB, MongoDB, Redis, SQLite, or Convex and work with the data in one focused Mac app — no Electron, no browser tabs, no context switching.
 
 ## Installation
 
@@ -81,7 +81,7 @@ Pluk requires macOS 15 or later and runs on Apple Silicon and Intel Macs.
 ## Features
 
 - **Native macOS interface** — AppKit and SwiftUI throughout, with real windows, tabs, sheets, keyboard navigation, and platform-standard controls.
-- **Six database families** — PostgreSQL, MySQL, MariaDB, MongoDB, SQLite, and Convex in one connection model.
+- **Seven database families** — PostgreSQL, MySQL, MariaDB, MongoDB, Redis, SQLite, and Convex in one connection model.
 - **Editable data grid** — browse, filter, sort, copy, paste, and edit rows directly, with dedicated views for larger values.
 - **Query workspace** — SQL editing, autocomplete, multiple result sets, history, schema-aware execution, and saved notebooks.
 - **Schema tools** — inspect columns and indexes, create tables and databases, and make schema changes without leaving the app.
@@ -97,8 +97,26 @@ Pluk requires macOS 15 or later and runs on Apple Silicon and Intel Macs.
 | PostgreSQL | Tables, schemas, SQL, JSON, SSL, SSH tunnels |
 | MySQL and MariaDB | Tables, SQL, SSL, SSH tunnels |
 | MongoDB | Collections, documents, filters, aggregation |
+| Redis | Cursor-based key browsing, core data structures, TTLs, and commands |
 | SQLite | Local database files and SQL |
 | Convex | Projects, deployments, documents, and queries |
+
+### Redis connections
+
+Pluk accepts `redis://` and `rediss://` URLs, including password-only or ACL
+username/password authentication and a logical database index such as `/2`.
+TLS connections use full certificate and hostname verification. Saved passwords
+are separated from connection metadata and stored in the macOS Keychain.
+
+The key browser uses cursor-based `SCAN` pages and never uses `KEYS`. Strings,
+hashes, lists, sets, sorted sets, streams, and RedisJSON values can be inspected;
+streams are read-only and show a bounded first page in this version, while large
+string and RedisJSON values currently load in full. RedisJSON appears only when
+the module is installed. Pluk currently requires Redis 6 or later (or a
+compatible Valkey server) because the client negotiates RESP3. The underlying
+client guarantees Redis compatibility through 7.2.4; newer Redis releases may
+work but should be validated for production use. Cluster, Sentinel, and Redis
+over SSH tunnels are not supported yet.
 
 ## Building from source
 

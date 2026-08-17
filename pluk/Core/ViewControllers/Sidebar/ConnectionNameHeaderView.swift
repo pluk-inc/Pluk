@@ -219,6 +219,7 @@ final class ConnectionNameHeaderView: NSView, NSPopoverDelegate {
         refreshIcon()
         refreshName()
         refreshStatus()
+        refreshCapabilities()
     }
 
     private func refreshIcon() {
@@ -229,6 +230,15 @@ final class ConnectionNameHeaderView: NSView, NSPopoverDelegate {
 
     private func refreshName() {
         nameLabel.stringValue = instance.connection.name
+    }
+
+    private func refreshCapabilities() {
+        let databaseType = instance.connection.databaseType
+        searchButton.toolTip = databaseType.supportsKeyValueBrowser
+            ? "Find Keys (⇧⌘F)"
+            : "Find Tables (⇧⌘F)"
+        plusButton.isHidden = !databaseType.supportsTableBrowser
+        plusButton.isEnabled = databaseType.supportsTableBrowser
     }
 
     private func refreshStatus() {

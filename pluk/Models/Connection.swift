@@ -18,6 +18,7 @@ enum DatabaseType: String, Codable, CaseIterable, Sendable {
     case mongodb = "MongoDB"
     case sqlite = "sqlite"
     case mysql = "mysql"
+    case redis = "redis"
     
     var displayName: String {
         switch self {
@@ -28,6 +29,7 @@ enum DatabaseType: String, Codable, CaseIterable, Sendable {
         case .mongodb: return "MongoDB"
         case .mysql: return "MySQL"
         case .sqlite: return "SQLite"
+        case .redis: return "Redis"
         }
     }
     
@@ -40,6 +42,7 @@ enum DatabaseType: String, Codable, CaseIterable, Sendable {
         case .mysql: return Color(hex: "#00546B")
         case .mongodb: return Color(hex: "#00ED64")
         case .sqlite: return Color(hex: "#003B57")
+        case .redis: return Color(hex: "#DC382D")
         }
     }
     
@@ -52,6 +55,7 @@ enum DatabaseType: String, Codable, CaseIterable, Sendable {
         case .mysql: return Color(hex: "#00546B")
         case .mongodb: return Color(hex: "#021E2C")
         case .sqlite: return Color(hex: "#E6F0FA")
+        case .redis: return Color(hex: "#A41E11")
         }
     }
     
@@ -64,6 +68,7 @@ enum DatabaseType: String, Codable, CaseIterable, Sendable {
         case .mongodb: return "mongodb"
         case .mysql: return "mysql"
         case .sqlite: return "sqlite"
+        case .redis: return "redis"
         }
     }
     
@@ -76,6 +81,7 @@ enum DatabaseType: String, Codable, CaseIterable, Sendable {
         case .mongodb: return "mongodb"
         case .mysql: return "mysql.white"
         case .sqlite: return "sqlite"
+        case .redis: return "redis"
         }
     }
     
@@ -105,6 +111,8 @@ enum DatabaseType: String, Codable, CaseIterable, Sendable {
             return "mongodb+srv://user:password@cluster.mongodb.net"
         case .sqlite:
             return "sqlite:///path/to/database.db"
+        case .redis:
+            return "redis://localhost:6379/0"
         }
     }
     
@@ -112,14 +120,14 @@ enum DatabaseType: String, Codable, CaseIterable, Sendable {
         switch self {
         case .convex, .supabase:
             return .platforms
-        case .postgres, .mysql, .mongodb, .sqlite:
+        case .postgres, .mysql, .mongodb, .sqlite, .redis:
             return .database
         }
     }
     
     var dataModelType: DataModelType {
             switch self {
-            case .mongodb:
+            case .mongodb, .redis:
                 return .noSQL
             case .convex, .supabase, .postgres, .mysql, .sqlite:
                 return .sql
@@ -130,7 +138,41 @@ enum DatabaseType: String, Codable, CaseIterable, Sendable {
         switch self {
         case .convex:
             return true
-        case .supabase, .postgres, .mysql, .sqlite, .mongodb:
+        case .supabase, .postgres, .mysql, .sqlite, .mongodb, .redis:
+            return false
+        }
+    }
+
+    var supportsTableBrowser: Bool {
+        self != .redis
+    }
+
+    var supportsSchemaBrowser: Bool {
+        self != .redis
+    }
+
+    var supportsCanvas: Bool {
+        self != .redis
+    }
+
+    var supportsNotebookAnalytics: Bool {
+        self != .redis
+    }
+
+    var supportsKeyValueBrowser: Bool {
+        self == .redis
+    }
+
+    var supportsCommandWorkspace: Bool {
+        self == .redis || self == .postgres || self == .supabase || self == .mysql
+            || self == .sqlite || self == .mongodb
+    }
+
+    var supportsDatabaseCreation: Bool {
+        switch self {
+        case .postgres, .mysql, .mongodb, .supabase:
+            return true
+        case .convex, .sqlite, .redis:
             return false
         }
     }
@@ -306,14 +348,14 @@ final class Connection {
             return password ?? ""
         }
         // If we have individual fields, construct URI from them (new approach)
-        if let hostname = hostname, !hostname.isEmpty,
-           let port = port, !port.isEmpty,
-           let username = username, !username.isEmpty {
+        if canConstructURIFromFields {
             return constructURIFromFields()
         }
         
         // Fallback to legacy URI construction (backward compatibility)
-        if let database = defaultDatabase, !database.isEmpty {
+        if databaseType == .redis {
+            return url ?? ""
+        } else if let database = defaultDatabase, !database.isEmpty {
             return "\(url ?? "")/\(database)"
         } else {
             return url ?? ""
@@ -321,7 +363,23 @@ final class Connection {
     }
 
     private func constructURIFromFields(encodeCredentials: Bool = true) -> String {
-        guard let hostname = hostname, let port = port, let username = username else {
+        guard let hostname, let port else {
+            return url ?? ""
+        }
+
+        if databaseType == .redis {
+            let databaseIndex = Int(defaultDatabase ?? "0") ?? 0
+            return (try? ConnectionURLParser.makeRedisURL(
+                hostname: hostname,
+                port: Int(port) ?? 6379,
+                username: username,
+                password: password,
+                databaseIndex: databaseIndex,
+                usesTLS: redisUsesTLS
+            )) ?? (url ?? "")
+        }
+
+        guard let username else {
             return url ?? ""
         }
 
@@ -333,6 +391,8 @@ final class Connection {
             scheme = "mysql"
         case .mongodb:
             scheme = "mongodb"
+        case .redis:
+            scheme = redisUsesTLS ? "rediss" : "redis"
         }
 
         let resolvedHost = hostname.isEmpty ? "localhost" : hostname
@@ -398,9 +458,7 @@ final class Connection {
         if databaseType == .convex {
             return password ?? ""
         }
-        if let hostname = hostname, !hostname.isEmpty,
-           let port = port, !port.isEmpty,
-           let username = username, !username.isEmpty {
+        if canConstructURIFromFields {
             return constructURIFromFields(encodeCredentials: false)
         }
         return url ?? ""
@@ -408,7 +466,8 @@ final class Connection {
     
     // Helper method to check if connection uses new field-based approach
     var usesFieldBasedConnection: Bool {
-        return hostname != nil && port != nil && username != nil
+        guard hostname != nil, port != nil else { return false }
+        return databaseType == .redis || username != nil
     }
     
     // Helper method to check if password exists in keychain
@@ -440,9 +499,7 @@ final class Connection {
         }
         
         // If we have individual fields, construct display URL from them
-        if let hostname = hostname, !hostname.isEmpty,
-           let port = port, !port.isEmpty,
-           let username = username, !username.isEmpty {
+        if canConstructURIFromFields {
             return constructDisplayURLFromFields()
         }
         
@@ -460,8 +517,22 @@ final class Connection {
     }
     
     private func constructDisplayURLFromFields() -> String {
-        guard let hostname = hostname, let port = port, let username = username else {
+        guard let hostname, let port else {
             return "Invalid connection"
+        }
+
+        let resolvedUsername = username ?? ""
+
+        if databaseType == .redis {
+            let databaseIndex = Int(defaultDatabase ?? "0") ?? 0
+            return (try? ConnectionURLParser.makeRedisURL(
+                hostname: hostname,
+                port: Int(port) ?? 6379,
+                username: resolvedUsername,
+                password: hasPassword ? "****" : nil,
+                databaseIndex: databaseIndex,
+                usesTLS: redisUsesTLS
+            )) ?? "\(hostname):\(port)"
         }
         
         var components = URLComponents()
@@ -475,11 +546,13 @@ final class Connection {
             components.scheme = "sqlLite"
         case .mongodb:
             components.scheme = "mongodb"
+        case .redis:
+            components.scheme = redisUsesTLS ? "rediss" : "redis"
         }
         
         components.host = hostname
         components.port = Int(port)
-        components.user = username
+        components.user = resolvedUsername
         
         // Show asterisks if password exists in keychain
         if hasPassword {
@@ -562,6 +635,20 @@ final class Connection {
     
     // Helper method to populate fields from existing URL (for migration)
     func populateFieldsFromURL() {
+        if databaseType == .redis,
+           let storedURL = url,
+           let parsed = try? ConnectionURLParser.parseRedis(storedURL) {
+            hostname = parsed.hostname
+            port = String(parsed.port)
+            username = parsed.username ?? ""
+            password = parsed.password
+            defaultDatabase = String(parsed.databaseIndex)
+            sslMode = parsed.usesTLS ? "require" : "disable"
+            // Redis credentials must not remain embedded in SwiftData.
+            url = nil
+            return
+        }
+
         guard let urlComponents = URLComponents(string: url ?? "") else { return }
         
         self.hostname = urlComponents.host
@@ -597,5 +684,22 @@ final class Connection {
 
     private var sshKeyPassphraseKeychainId: String {
         "\(keychainId).ssh.keyPassphrase"
+    }
+
+    private var canConstructURIFromFields: Bool {
+        guard let hostname, !hostname.isEmpty,
+              let port, !port.isEmpty else {
+            return false
+        }
+        return databaseType == .redis || !(username ?? "").isEmpty
+    }
+
+    private var redisUsesTLS: Bool {
+        switch sslMode?.lowercased() {
+        case "require", "verify-ca", "verify-full":
+            return true
+        default:
+            return false
+        }
     }
 }

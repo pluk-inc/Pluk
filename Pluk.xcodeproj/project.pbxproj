@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		9A7ED1502F90000100C0DE03 /* Valkey in Frameworks */ = {isa = PBXBuildFile; productRef = 9A7ED1502F90000100C0DE02 /* Valkey */; };
 		9A0216502DFD9BF300F7FCF3 /* BSON in Frameworks */ = {isa = PBXBuildFile; productRef = 9A02164F2DFD9BF300F7FCF3 /* BSON */; };
 		9A25D38A2F65C24A003259CB /* ConvexMobile in Frameworks */ = {isa = PBXBuildFile; productRef = 9A25D3892F65C24A003259CB /* ConvexMobile */; };
 		9A2923052DBBA5830032F301 /* PostHog in Frameworks */ = {isa = PBXBuildFile; productRef = 9A2923042DBBA5830032F301 /* PostHog */; };
@@ -86,6 +87,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9A7ED1502F90000100C0DE03 /* Valkey in Frameworks */,
 				9A5DDF232E53465500812D2A /* MySQLNIO in Frameworks */,
 				9A623D9B2E2C0A4600B9CFCB /* Sparkle in Frameworks */,
 				9AA8038E2E46601200B6F1B4 /* SQLiteNIO in Frameworks */,
@@ -171,6 +173,7 @@
 			);
 			name = Pluk;
 			packageProductDependencies = (
+				9A7ED1502F90000100C0DE02 /* Valkey */,
 				9AE4BF702D25281600EA996E /* Meow */,
 				9AE4BF722D25281600EA996E /* MongoClient */,
 				9AE4BF742D25281600EA996E /* MongoCore */,
@@ -273,6 +276,7 @@
 			mainGroup = 9A529E722D23CFC700618009;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				9A7ED1502F90000100C0DE01 /* XCRemoteSwiftPackageReference "valkey-swift" */,
 				9AE4BF6F2D25269A00EA996E /* XCRemoteSwiftPackageReference "MongoKitten" */,
 				9A44A0BC2D2E91F900E04DC8 /* XCRemoteSwiftPackageReference "UInt128" */,
 				9AF175BB2D895D7200351A82 /* XCRemoteSwiftPackageReference "CodeEditorView" */,
@@ -685,6 +689,16 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		9A7ED1502F90000100C0DE01 /* XCRemoteSwiftPackageReference "valkey-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/valkey-io/valkey-swift.git";
+			requirement = {
+				kind = exactVersion;
+				version = 1.5.0;
+			};
+			traits = (
+			);
+		};
 		9A25D3882F65C24A003259CB /* XCRemoteSwiftPackageReference "convex-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/pluk-inc/convex-swift";
@@ -778,6 +792,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		9A7ED1502F90000100C0DE02 /* Valkey */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9A7ED1502F90000100C0DE01 /* XCRemoteSwiftPackageReference "valkey-swift" */;
+			productName = Valkey;
+		};
 		9A02164F2DFD9BF300F7FCF3 /* BSON */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = BSON;

@@ -55,9 +55,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         )
     }
 
-    @objc
+    @objc nonisolated
     private func userDefaultsDidChange(_ notification: Notification) {
-        applyMenuBarVisibility()
+        Task { @MainActor [weak self] in
+            self?.applyMenuBarVisibility()
+        }
     }
 
     private func applyMenuBarVisibility() {

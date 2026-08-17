@@ -1,6 +1,7 @@
 import Foundation
 
 extension Notification.Name {
+    static let redisKeysRefreshRequested = Notification.Name("redisKeysRefreshRequested")
     static let didRequestDelete = Notification.Name("didRequestDelete")
     static let didRequestCopy = Notification.Name("didRequestCopy")
     static let didRequestPaste = Notification.Name("didRequestPaste")

@@ -562,7 +562,7 @@ final class TabBarView: NSView {
     }
 
     @objc private func newTabAction() {
-        instance.createSQLEditorTab()
+        instance.createEditorTab()
     }
 
     @objc private func toggleSidebarAction() {
@@ -685,7 +685,7 @@ final class TabBarView: NSView {
                     self.syncTabs()
                     return nil
                 case "t":
-                    instance.createSQLEditorTab()
+                    instance.createEditorTab()
                     return nil
                 default:
                     if let char = key, let digit = Int(char), (1...9).contains(digit) {

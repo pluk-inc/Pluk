@@ -1,6 +1,9 @@
 import AppKit
 import Observation
 
+private let sanitizedRedisHistoryHelp =
+    "Credentials were redacted. Copy the command and re-enter them before running it."
+
 /// AppKit replacement for the SwiftUI `QueryHistorySidebarList`. Renders
 /// query history grouped by date (Today / Yesterday / This Week / Last Week
 /// / Older) in an NSTableView, scoped to the connection's currently-selected
@@ -187,7 +190,7 @@ final class QueryHistoryListViewController: NSViewController {
         let clickedRow = tableView.clickedRow
         guard clickedRow >= 0, clickedRow < rows.count else { return }
         if case .entry(let id) = rows[clickedRow], let entry = entriesById[id] {
-            instance.createSQLEditorTab(withQuery: entry.query)
+            loadInEditor(entry)
         }
     }
 
@@ -208,13 +211,18 @@ final class QueryHistoryListViewController: NSViewController {
             action: #selector(contextCopyQuery(_:)),
             entryId: id
         )
-        addItem(
+        let loadItem = addItem(
             to: menu,
             title: "Load in Editor",
             symbol: "arrow.up.forward.square",
             action: #selector(contextLoadInEditor(_:)),
             entryId: id
         )
+        if !entry.isReplayable {
+            loadItem.title = "Load in Editor (Credentials Redacted)"
+            loadItem.toolTip = sanitizedRedisHistoryHelp
+            loadItem.isEnabled = false
+        }
 
         if let tableName = entry.tableName, !tableName.isEmpty {
             menu.addItem(.separator())
@@ -265,7 +273,16 @@ final class QueryHistoryListViewController: NSViewController {
     @objc private func contextLoadInEditor(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? String,
               let entry = entriesById[id] else { return }
-        instance.createSQLEditorTab(withQuery: entry.query)
+        loadInEditor(entry)
+    }
+
+    private func loadInEditor(_ entry: QueryHistoryEntryViewModel) {
+        guard entry.isReplayable else { return }
+        if instance.connection.databaseType == .redis {
+            instance.createRedisCommandTab(withCommand: entry.query)
+        } else {
+            instance.createSQLEditorTab(withQuery: entry.query)
+        }
     }
 
     @objc private func contextOpenTable(_ sender: NSMenuItem) {
@@ -573,9 +590,12 @@ private final class HistoryRowCell: NSView {
             metaLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -8),
         ])
 
-        toolTip = entry.wasSuccessful
+        let queryToolTip = entry.wasSuccessful
             ? entry.query
             : (entry.errorMessage.map { "\(entry.query)\n\n\($0)" } ?? entry.query)
+        toolTip = entry.isReplayable
+            ? queryToolTip
+            : "\(queryToolTip)\n\n\(sanitizedRedisHistoryHelp)"
     }
 
     @available(*, unavailable)

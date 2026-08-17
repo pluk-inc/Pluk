@@ -5,6 +5,8 @@ func getTabIconName(for tab: DatabaseTab, databaseType: DatabaseType) -> String 
     guard tab.type != .functionEditor else { return "f.cursive" }
     guard tab.type != .sqlEditor else { return "terminal" }
     guard tab.type != .canvas else { return "rectangle.connected.to.line.below" }
+    guard tab.type != .redisCommand else { return "terminal" }
+    guard tab.type != .redisKey else { return "key.horizontal" }
 
     switch tab.viewMode {
     case .content:

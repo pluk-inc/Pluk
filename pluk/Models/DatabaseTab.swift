@@ -40,6 +40,10 @@ final class DatabaseTab: Identifiable, Equatable, Transferable {
     var functionSchema: String?
     var originalFunctionDefinition: String?
 
+    // Redis key metadata (transient, not persisted). Redis keys are binary,
+    // so the display name is never used as the command argument.
+    var redisKeyData: Data?
+
     // CodingKeys to exclude transient properties from Codable
     enum CodingKeys: String, CodingKey {
         case id, name, type, queryState, documents, hasSchemaDeviation
@@ -105,6 +109,8 @@ final class DatabaseTab: Identifiable, Equatable, Transferable {
         case sqlEditor
         case canvas
         case functionEditor
+        case redisKey
+        case redisCommand
     }
 
     enum ViewMode: Int, Equatable, Codable {

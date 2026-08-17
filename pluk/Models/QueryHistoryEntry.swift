@@ -34,6 +34,7 @@ enum QueryType: String, Codable, CaseIterable {
 
 enum QuerySource: String, Codable, CaseIterable {
     case sqlEditor = "sql_editor"
+    case redisCommandEditor = "redis_command_editor"
     case documentUpdate = "document_update"
     case documentCreate = "document_create"
     case documentDelete = "document_delete"
@@ -43,6 +44,7 @@ enum QuerySource: String, Codable, CaseIterable {
     var displayName: String {
         switch self {
         case .sqlEditor: return "SQL Editor"
+        case .redisCommandEditor: return "Redis Command Editor"
         case .documentUpdate: return "Document Update"
         case .documentCreate: return "Document Create"
         case .documentDelete: return "Document Delete"
@@ -69,6 +71,7 @@ final class QueryHistoryEntry {
     var wasSuccessful: Bool = true
     var errorMessage: String?
     var wasSanitized: Bool = false
+    var redisCommandCategory: String?
 
     init(
         connectionKeychainId: String,
@@ -83,7 +86,8 @@ final class QueryHistoryEntry {
         rowsAffected: Int? = nil,
         wasSuccessful: Bool = true,
         errorMessage: String? = nil,
-        wasSanitized: Bool = false
+        wasSanitized: Bool = false,
+        redisCommandCategory: RedisCommandCategory? = nil
     ) {
         self.connectionKeychainId = connectionKeychainId
         self.encryptedQuery = encryptedQuery
@@ -98,6 +102,7 @@ final class QueryHistoryEntry {
         self.wasSuccessful = wasSuccessful
         self.errorMessage = errorMessage
         self.wasSanitized = wasSanitized
+        self.redisCommandCategory = redisCommandCategory?.rawValue
     }
 
     var queryTypeEnum: QueryType {
@@ -106,6 +111,10 @@ final class QueryHistoryEntry {
 
     var querySourceEnum: QuerySource {
         QuerySource(rawValue: querySource) ?? .sqlEditor
+    }
+
+    var redisCommandCategoryEnum: RedisCommandCategory? {
+        redisCommandCategory.flatMap(RedisCommandCategory.init(rawValue:))
     }
 
     var databaseTypeEnum: DatabaseType? {

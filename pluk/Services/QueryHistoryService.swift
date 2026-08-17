@@ -34,7 +34,9 @@ final class QueryHistoryService {
         executionDurationMs: Int? = nil,
         rowsAffected: Int? = nil,
         wasSuccessful: Bool = true,
-        errorMessage: String? = nil
+        errorMessage: String? = nil,
+        redisCommandCategory: RedisCommandCategory? = nil,
+        wasAlreadySanitized: Bool = false
     ) {
         let sanitizationResult = QuerySanitizer.sanitize(query)
         let detectedType = queryType ?? QuerySanitizer.detectQueryType(from: query)
@@ -58,7 +60,8 @@ final class QueryHistoryService {
             rowsAffected: rowsAffected,
             wasSuccessful: wasSuccessful,
             errorMessage: errorMessage,
-            wasSanitized: sanitizationResult.wasSanitized
+            wasSanitized: sanitizationResult.wasSanitized || wasAlreadySanitized,
+            redisCommandCategory: redisCommandCategory
         )
 
         modelContext.insert(entry)
@@ -69,8 +72,48 @@ final class QueryHistoryService {
             debugLog("Failed to save query history entry: \(error)")
         }
 
-        Task {
-            await enforceRetentionLimits()
+        // Retention uses this main-actor ModelContext and performs no async
+        // work. Running it inline avoids leaving an unstructured task that can
+        // outlive a short-lived context (for example an app-hosted test) and
+        // race SwiftData store teardown.
+        enforceRetentionLimits()
+    }
+
+    /// Records an analyzed Redis command without ever persisting authentication
+    /// credentials. The command editor should analyze before execution and pass
+    /// that same analysis here so the confirmation and history decisions cannot
+    /// drift apart.
+    @discardableResult
+    func recordRedisCommand(
+        analysis: RedisCommandAnalysis,
+        databaseType: DatabaseType,
+        databaseName: String? = nil,
+        executionDurationMs: Int? = nil,
+        rowsAffected: Int? = nil,
+        wasSuccessful: Bool = true,
+        errorMessage: String? = nil
+    ) -> Bool {
+        switch analysis.historyDisposition {
+        case .exclude:
+            return false
+        case .record(let command, let wasRedacted):
+            recordQuery(
+                query: command,
+                queryType: .raw,
+                source: .redisCommandEditor,
+                databaseType: databaseType,
+                databaseName: databaseName,
+                executionDurationMs: executionDurationMs,
+                rowsAffected: rowsAffected,
+                wasSuccessful: wasSuccessful,
+                // Some Redis servers or proxies echo command arguments in
+                // errors. Once a command needed credential redaction, omit
+                // its raw error text rather than risk persisting the secret.
+                errorMessage: wasRedacted ? nil : errorMessage,
+                redisCommandCategory: analysis.category,
+                wasAlreadySanitized: wasRedacted
+            )
+            return true
         }
     }
 
@@ -201,7 +244,7 @@ final class QueryHistoryService {
         }
     }
 
-    private func enforceRetentionLimits() async {
+    private func enforceRetentionLimits() {
         let cutoffDate = Calendar.current.date(byAdding: .day, value: -retentionDays, to: Date()) ?? Date()
 
         let agePredicate = #Predicate<QueryHistoryEntry> { entry in
@@ -271,7 +314,8 @@ final class QueryHistoryService {
             rowsAffected: entry.rowsAffected,
             wasSuccessful: entry.wasSuccessful,
             errorMessage: entry.errorMessage,
-            wasSanitized: entry.wasSanitized
+            wasSanitized: entry.wasSanitized,
+            redisCommandCategory: entry.redisCommandCategoryEnum
         )
     }
 }
@@ -290,6 +334,14 @@ struct QueryHistoryEntryViewModel: Identifiable {
     let wasSuccessful: Bool
     let errorMessage: String?
     let wasSanitized: Bool
+    let redisCommandCategory: RedisCommandCategory?
+
+    /// Credential-bearing Redis commands are stored only in redacted form.
+    /// Treat that placeholder text as display-only so it cannot be loaded back
+    /// into an executable command editor as if it were the original command.
+    var isReplayable: Bool {
+        querySource != .redisCommandEditor || !wasSanitized
+    }
 
     init(
         entryId: String,
@@ -304,7 +356,8 @@ struct QueryHistoryEntryViewModel: Identifiable {
         rowsAffected: Int?,
         wasSuccessful: Bool,
         errorMessage: String?,
-        wasSanitized: Bool
+        wasSanitized: Bool,
+        redisCommandCategory: RedisCommandCategory? = nil
     ) {
         self.id = entryId
         self.query = query
@@ -319,6 +372,7 @@ struct QueryHistoryEntryViewModel: Identifiable {
         self.wasSuccessful = wasSuccessful
         self.errorMessage = errorMessage
         self.wasSanitized = wasSanitized
+        self.redisCommandCategory = redisCommandCategory
     }
 
     var formattedDate: String {

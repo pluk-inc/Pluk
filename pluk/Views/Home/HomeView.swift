@@ -396,7 +396,7 @@ struct HomeView: View {
         connection.updatedAt = Date()
 
         switch candidate.databaseType {
-        case .postgres, .mysql:
+        case .postgres, .mysql, .redis:
             connection.url = nil
             connection.sslMode = "disable"
         case .mongodb:
@@ -413,7 +413,7 @@ struct HomeView: View {
 
     private func makeConnection(from candidate: DockerDatabaseCandidate) -> Connection {
         switch candidate.databaseType {
-        case .postgres, .mysql:
+        case .postgres, .mysql, .redis:
             return Connection(
                 databaseType: candidate.databaseType,
                 name: candidate.connectionName,

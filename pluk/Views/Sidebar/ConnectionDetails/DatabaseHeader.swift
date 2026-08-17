@@ -31,7 +31,7 @@ struct DatabaseHeader: View {
         switch databaseType {
         case .postgres, .mysql, .mongodb, .supabase:
             return true
-        case .sqlite, .convex:
+        case .sqlite, .convex, .redis:
             return false
         }
     }
@@ -40,7 +40,13 @@ struct DatabaseHeader: View {
         VStack {
             HStack {
                 HStack(spacing: 0) {
-                    if instance.databaseType == .convex {
+                    if instance.databaseType == .redis {
+                        RedisDatabaseHeaderView(
+                            databaseIndex: instance.connectedDatabase?.name
+                                ?? instance.connection.defaultDatabase
+                                ?? "0"
+                        )
+                    } else if instance.databaseType == .convex {
                         ConvexHeaderView(
                             availableSchemas: availableSchemas,
                             selectedSchema: $selectedSchema,
@@ -69,7 +75,9 @@ struct DatabaseHeader: View {
                     let shouldShowRefreshButton = isSidebarHovered || isLoadingCollections
 
                     Button {
-                        if isLoadingCollections {
+                        if instance.databaseType == .redis {
+                            NotificationCenter.default.post(name: .redisKeysRefreshRequested, object: instance)
+                        } else if isLoadingCollections {
                             collectionLoader.cancel()
                         } else {
                             refreshSidebarItems()
@@ -79,23 +87,37 @@ struct DatabaseHeader: View {
                             .contentShape(.rect)
                     }
                     .buttonStyle(SidebarHeaderIconButtonStyle(isActive: isLoadingCollections))
-                    .customHelp(isLoadingCollections ? "Stop Refresh" : "Refresh Tables")
+                    .customHelp(isLoadingCollections ? "Stop Refresh" : (instance.databaseType == .redis ? "Refresh Keys" : "Refresh Tables"))
                     .disabled(!isLoadingCollections && instance.connectionStatus != .connected)
                     .opacity(shouldShowRefreshButton ? 1 : 0)
                     .allowsHitTesting(shouldShowRefreshButton)
                     .animation(.easeOut(duration: 0.12), value: shouldShowRefreshButton)
 
-                    Button {
-                        instance.createCanvasTab()
-                    } label: {
-                        Image(systemName: "rectangle.connected.to.line.below")
-                            .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 24, height: 20)
-                            .contentShape(.rect)
+                    if instance.connection.databaseType.supportsCanvas {
+                        Button {
+                            instance.createCanvasTab()
+                        } label: {
+                            Image(systemName: "rectangle.connected.to.line.below")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 24, height: 20)
+                                .contentShape(.rect)
+                        }
+                        .buttonStyle(SidebarHeaderIconButtonStyle())
+                        .customHelp("Schema Visualizer")
+                    } else if instance.connection.databaseType.supportsCommandWorkspace {
+                        Button {
+                            instance.createRedisCommandTab()
+                        } label: {
+                            Image(systemName: "terminal")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 24, height: 20)
+                                .contentShape(.rect)
+                        }
+                        .buttonStyle(SidebarHeaderIconButtonStyle())
+                        .customHelp("Open Command Editor")
                     }
-                    .buttonStyle(SidebarHeaderIconButtonStyle())
-                    .customHelp("Schema Visualizer")
                 }
             }
         }
@@ -106,11 +128,15 @@ struct DatabaseHeader: View {
         })
         .onAppear {
             selectedDatabase = instance.connectedDatabase?.name ?? ""
-            loadAvailableSchemas()
+            if instance.databaseType != .redis {
+                loadAvailableSchemas()
+            }
         }
         .onChange(of: instance.readiness) { _, _ in
             selectedDatabase = instance.connectedDatabase?.name ?? ""
-            loadAvailableSchemas()
+            if instance.databaseType != .redis {
+                loadAvailableSchemas()
+            }
         }
         .onChange(of: instance.databaseService.currentSchema) { oldSchema, newSchema in
             // The first `nil → default-schema` transition fires right after
@@ -120,6 +146,7 @@ struct DatabaseHeader: View {
             // internally), so reloading here would just re-fetch the same data
             // — wasting an API round-trip and flashing the empty state.
             // User-initiated schema switches always go default → other.
+            guard instance.databaseType != .redis else { return }
             guard oldSchema != nil else { return }
             collectionLoader.start {
                 await loadCollectionsForSchemaChange(newSchema)
@@ -349,6 +376,24 @@ struct DatabaseHeader: View {
         }
 
         menu.popUp(positioning: nil, at: .zero, in: anchor)
+    }
+}
+
+private struct RedisDatabaseHeaderView: View {
+    let databaseIndex: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "externaldrive.connected.to.line.below")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            Text("DB \(databaseIndex)")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
     }
 }
 
@@ -714,7 +759,7 @@ struct TraditionalDatabaseHeaderView<TruncatedTextView: View>: View {
         switch databaseType {
         case .postgres, .mysql, .mongodb, .supabase:
             return true
-        case .sqlite, .convex:
+        case .sqlite, .convex, .redis:
             return false
         }
     }

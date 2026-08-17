@@ -8,12 +8,15 @@
 
 import Foundation
 
-enum ConnectionURLParserError: Error, LocalizedError {
+enum ConnectionURLParserError: Error, LocalizedError, Equatable, Sendable {
     case invalidURL
     case missingScheme
     case unsupportedScheme(String)
     case missingHost
     case missingUsername
+    case missingPassword
+    case invalidPort(Int)
+    case invalidDatabaseIndex(String)
     case invalidSSLMode(String)
 
     var errorDescription: String? {
@@ -28,6 +31,12 @@ enum ConnectionURLParserError: Error, LocalizedError {
             return "Connection URL must include a hostname"
         case .missingUsername:
             return "Connection URL must include a username"
+        case .missingPassword:
+            return "Redis ACL authentication requires a password"
+        case .invalidPort(let port):
+            return "Connection URL contains an invalid port: \(port)"
+        case .invalidDatabaseIndex(let index):
+            return "Redis database index must be a non-negative integer: \(index)"
         case .invalidSSLMode(let mode):
             return "Invalid SSL mode: \(mode)"
         }
@@ -67,7 +76,107 @@ struct ParsedConnectionURL {
     }
 }
 
+struct ParsedRedisConnectionURL: Equatable, Sendable {
+    let hostname: String
+    let port: Int
+    let username: String?
+    let password: String?
+    let databaseIndex: Int
+    let usesTLS: Bool
+
+    var scheme: String {
+        usesTLS ? "rediss" : "redis"
+    }
+}
+
 struct ConnectionURLParser {
+
+    // MARK: - Redis Parsing
+
+    static func parseRedis(_ urlString: String) throws -> ParsedRedisConnectionURL {
+        let trimmedURL = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedURL.isEmpty,
+              let components = URLComponents(string: trimmedURL) else {
+            throw ConnectionURLParserError.invalidURL
+        }
+
+        guard let scheme = components.scheme?.lowercased(), !scheme.isEmpty else {
+            throw ConnectionURLParserError.missingScheme
+        }
+        guard scheme == "redis" || scheme == "rediss" else {
+            throw ConnectionURLParserError.unsupportedScheme(scheme)
+        }
+        guard let parsedHostname = components.host, !parsedHostname.isEmpty else {
+            throw ConnectionURLParserError.missingHost
+        }
+        let hostname = normalizedParsedRedisHost(parsedHostname)
+
+        let port = components.port ?? 6379
+        guard (1...65_535).contains(port) else {
+            throw ConnectionURLParserError.invalidPort(port)
+        }
+
+        let databaseIndex = try parseRedisDatabaseIndex(from: components.path)
+        let username = components.user.flatMap { $0.isEmpty ? nil : $0 }
+        let password = components.password.flatMap { $0.isEmpty ? nil : $0 }
+        guard username == nil || password != nil else {
+            throw ConnectionURLParserError.missingPassword
+        }
+
+        return ParsedRedisConnectionURL(
+            hostname: hostname,
+            port: port,
+            username: username,
+            password: password,
+            databaseIndex: databaseIndex,
+            usesTLS: scheme == "rediss"
+        )
+    }
+
+    static func makeRedisURL(
+        hostname: String,
+        port: Int = 6379,
+        username: String? = nil,
+        password: String? = nil,
+        databaseIndex: Int = 0,
+        usesTLS: Bool = false
+    ) throws -> String {
+        let trimmedHost = hostname.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedHost.isEmpty else {
+            throw ConnectionURLParserError.missingHost
+        }
+        guard (1...65_535).contains(port) else {
+            throw ConnectionURLParserError.invalidPort(port)
+        }
+        guard databaseIndex >= 0 else {
+            throw ConnectionURLParserError.invalidDatabaseIndex(String(databaseIndex))
+        }
+
+        var components = URLComponents()
+        components.scheme = usesTLS ? "rediss" : "redis"
+        components.host = normalizedHostForURLComponents(trimmedHost)
+        components.port = port
+
+        let normalizedUsername = username?.isEmpty == false ? username : nil
+        let normalizedPassword = password?.isEmpty == false ? password : nil
+        guard normalizedUsername == nil || normalizedPassword != nil else {
+            throw ConnectionURLParserError.missingPassword
+        }
+        if let normalizedUsername {
+            components.user = normalizedUsername
+        } else if normalizedPassword != nil {
+            // Redis URI password-only authentication is represented as
+            // redis://:password@host, with an intentionally empty username.
+            components.user = ""
+        }
+        components.password = normalizedPassword
+        components.path = "/\(databaseIndex)"
+
+        guard let result = components.string else {
+            throw ConnectionURLParserError.invalidURL
+        }
+        return result
+    }
 
     // MARK: - MySQL Parsing (based on vapor/mysql-kit)
 
@@ -147,6 +256,35 @@ struct ConnectionURLParser {
     }
 
     // MARK: - Helpers
+
+    private static func parseRedisDatabaseIndex(from path: String) throws -> Int {
+        guard !path.isEmpty, path != "/" else {
+            return 0
+        }
+
+        let indexString = String(path.dropFirst())
+        guard !indexString.isEmpty,
+              indexString.utf8.allSatisfy({ (48...57).contains($0) }),
+              let databaseIndex = Int(indexString) else {
+            throw ConnectionURLParserError.invalidDatabaseIndex(indexString)
+        }
+        return databaseIndex
+    }
+
+    private static func normalizedHostForURLComponents(_ hostname: String) -> String {
+        guard hostname.contains(":"),
+              !(hostname.hasPrefix("[") && hostname.hasSuffix("]")) else {
+            return hostname
+        }
+        return "[\(hostname)]"
+    }
+
+    private static func normalizedParsedRedisHost(_ hostname: String) -> String {
+        guard hostname.hasPrefix("["), hostname.hasSuffix("]") else {
+            return hostname
+        }
+        return String(hostname.dropFirst().dropLast())
+    }
 
     private static func parseSSLMode(
         from queryItems: [URLQueryItem],

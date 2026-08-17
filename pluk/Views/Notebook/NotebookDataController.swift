@@ -454,7 +454,8 @@ final class NotebookDataController {
         let connectionDescriptor = FetchDescriptor<Connection>(
             sortBy: [SortDescriptor(\.lastOpenedAt, order: .reverse)]
         )
-        connections = (try? modelContainer.mainContext.fetch(connectionDescriptor)) ?? []
+        let fetchedConnections = (try? modelContainer.mainContext.fetch(connectionDescriptor)) ?? []
+        connections = fetchedConnections.filter { $0.databaseType.supportsNotebookAnalytics }
     }
 
     private func save() {

@@ -8,7 +8,7 @@
 import Foundation
 
 struct QuerySanitizer {
-    struct SanitizationResult {
+    struct SanitizationResult: Equatable, Sendable {
         let sanitizedQuery: String
         let wasSanitized: Bool
     }
@@ -54,8 +54,9 @@ struct QuerySanitizer {
     ]
 
     static func sanitize(_ query: String) -> SanitizationResult {
-        var sanitizedQuery = query
-        var wasSanitized = false
+        let redisRedaction = RedisCommandHistoryRedactor.redactIfNeeded(in: query)
+        var sanitizedQuery = redisRedaction?.sanitizedCommand ?? query
+        var wasSanitized = redisRedaction?.wasRedacted ?? false
 
         for (pattern, replacement) in patterns {
             if let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) {

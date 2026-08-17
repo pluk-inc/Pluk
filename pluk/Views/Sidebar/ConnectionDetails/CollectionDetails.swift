@@ -59,6 +59,7 @@ final class SidebarCollectionLoadCoordinator {
 struct SidebarViewModeToggle: View {
     @Binding var viewMode: SidebarViewMode
     @Binding var showAdvancedHistory: Bool
+    var databaseType: DatabaseType?
 
     var body: some View {
         HStack(spacing: 2) {
@@ -68,7 +69,7 @@ struct SidebarViewModeToggle: View {
             ) {
                 viewMode = .tables
             }
-            .customHelp("Tables")
+            .customHelp(databaseType == .redis ? "Keys" : "Tables")
 
             SegmentIconButton(
                 icon: "clock.arrow.circlepath",
@@ -329,6 +330,10 @@ struct QueryHistorySidebarRow: View {
     }
 
     private func loadQueryInEditor() {
-        instance.createSQLEditorTab(withQuery: entry.query)
+        if instance.connection.databaseType == .redis {
+            instance.createRedisCommandTab(withCommand: entry.query)
+        } else {
+            instance.createSQLEditorTab(withQuery: entry.query)
+        }
     }
 }

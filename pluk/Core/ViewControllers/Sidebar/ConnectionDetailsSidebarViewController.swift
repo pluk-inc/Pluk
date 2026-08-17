@@ -31,6 +31,7 @@ final class ConnectionDetailsSidebarViewController: NSViewController {
     private var promoCardHost: NSHostingView<AnyView>?
     private var currentContent: NSView?
     private var listViewController: DatabaseListViewController?
+    private var redisListViewController: RedisKeyListViewController?
     private var historyViewController: QueryHistoryListViewController?
 
     // MARK: - State
@@ -164,6 +165,7 @@ final class ConnectionDetailsSidebarViewController: NSViewController {
         // can fade in / out with hover state.
         controlsRowHost.rootView = AnyView(makeControlsRow())
         listViewController?.setSidebarHovered(hovered)
+        redisListViewController?.setSidebarHovered(hovered)
     }
 
     private func makeSearchInput() -> some View {
@@ -192,19 +194,31 @@ final class ConnectionDetailsSidebarViewController: NSViewController {
         currentContent?.removeFromSuperview()
         listViewController?.removeFromParent()
         listViewController = nil
+        redisListViewController?.removeFromParent()
+        redisListViewController = nil
         historyViewController?.removeFromParent()
         historyViewController = nil
 
         let newContent: NSView
         switch viewModel.sidebarViewMode {
         case .tables:
-            let listVC = DatabaseListViewController(instance: instance, viewModel: viewModel)
-            listVC.onScrolledFromTopChanged = { [weak self] scrolled in
-                self?.setSeparatorVisible(scrolled)
+            if instance.connection.databaseType.supportsKeyValueBrowser {
+                let listVC = RedisKeyListViewController(instance: instance, viewModel: viewModel)
+                listVC.onScrolledFromTopChanged = { [weak self] scrolled in
+                    self?.setSeparatorVisible(scrolled)
+                }
+                redisListViewController = listVC
+                addChild(listVC)
+                newContent = listVC.view
+            } else {
+                let listVC = DatabaseListViewController(instance: instance, viewModel: viewModel)
+                listVC.onScrolledFromTopChanged = { [weak self] scrolled in
+                    self?.setSeparatorVisible(scrolled)
+                }
+                listViewController = listVC
+                addChild(listVC)
+                newContent = listVC.view
             }
-            listViewController = listVC
-            addChild(listVC)
-            newContent = listVC.view
         case .history:
             // History mode doesn't have scroll-edge tracking wired up; keep
             // the separator hidden to match previous behaviour.
@@ -285,6 +299,7 @@ final class ConnectionDetailsSidebarViewController: NSViewController {
             inset = 12
         }
         listViewController?.setBottomContentInset(inset)
+        redisListViewController?.setBottomContentInset(inset)
         historyViewController?.setBottomContentInset(inset)
     }
 
@@ -377,6 +392,10 @@ final class ConnectionDetailsSidebarViewController: NSViewController {
     }
 
     private func handleReadinessChange() {
+        if case .ready = instance.readiness {
+            redisListViewController?.connectionDidBecomeReady()
+        }
+
         if case .needsDatabaseSelection = instance.readiness {
             if !isPresentingDatabaseSelector, !userDismissedDatabaseSelector {
                 presentDatabaseSelector()
@@ -472,7 +491,8 @@ private struct DatabaseControlsRow: View {
                 showAdvancedHistory: Binding(
                     get: { viewModel.isShowingAdvancedHistory },
                     set: { viewModel.isShowingAdvancedHistory = $0 }
-                )
+                ),
+                databaseType: instance.databaseType
             )
         }
         .padding(.leading, 4)

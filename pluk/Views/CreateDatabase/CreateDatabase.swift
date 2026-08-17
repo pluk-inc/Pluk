@@ -182,12 +182,7 @@ struct CreateDatabaseForm: View {
 
     private var supportsOperation: Bool {
         guard let databaseType = instance.databaseType else { return false }
-        switch databaseType {
-        case .postgres, .mysql, .mongodb, .supabase:
-            return true
-        case .sqlite, .convex:
-            return false
-        }
+        return databaseType.supportsDatabaseCreation
     }
 
     private var unsupportedMessage: String {

@@ -137,6 +137,8 @@ import SwiftUI
                     self.connectedDatabase = MySQLDatabaseWrapper(name: targetName, size: nil, tableCount: nil)
                 case .sqlite:
                     self.connectedDatabase = SQLiteDatabaseWrapper(name: targetName, size: nil, tableCount: nil)
+                case .redis:
+                    self.connectedDatabase = RedisDatabaseWrapper(name: targetName, size: nil, tableCount: nil)
                 case .mongodb:
                     if let wrapper = await driverBox.getCurrentDatabaseWrapper() {
                         self.connectedDatabase = wrapper
@@ -252,7 +254,7 @@ import SwiftUI
         switch databaseType {
         case .postgres, .supabase, .mysql, .mongodb:
             return true
-        case .convex, .sqlite:
+        case .convex, .sqlite, .redis:
             return false
         }
     }
@@ -335,6 +337,8 @@ import SwiftUI
             return 3306
         case .mongodb:
             return 27017
+        case .redis:
+            return 6379
         default:
             return 5432
         }
@@ -351,8 +355,8 @@ import SwiftUI
             throw DatabaseError.operationFailed("No active database driver")
         }
         
-        self.connectedDatabase = database
         try await driverBox.switchDatabase(to: database.name)
+        self.connectedDatabase = database
         currentDeploymentURL = await driverBox.getCurrentDeploymentUrl()
         
         // Post notification about database switch
@@ -581,7 +585,137 @@ import SwiftUI
         }
         return try await activeDriverBox.listCollections(schema: schema)
     }
-    
+
+    // MARK: - Redis Operations
+
+    func scanRedisKeys(
+        cursor: UInt64 = 0,
+        pattern: String? = nil,
+        type: RedisKeyType? = nil,
+        count: Int = 200
+    ) async throws -> RedisScanPage {
+        try await requireRedisDriverBox().scanRedisKeys(
+            cursor: cursor,
+            pattern: pattern,
+            type: type,
+            count: count
+        )
+    }
+
+    func redisKeyMetadata(for key: RedisKey) async throws -> RedisKeyMetadata {
+        try await requireRedisDriverBox().redisKeyMetadata(for: key)
+    }
+
+    func redisValue(
+        for key: RedisKey,
+        page: RedisValuePage = RedisValuePage()
+    ) async throws -> RedisValue {
+        try await requireRedisDriverBox().redisValue(for: key, page: page)
+    }
+
+    func updateRedisValue(
+        _ update: RedisValueUpdate,
+        for key: RedisKey,
+        preserveTTL: Bool = true
+    ) async throws {
+        try await requireRedisDriverBox().updateRedisValue(update, for: key, preserveTTL: preserveTTL)
+    }
+
+    func renameRedisKey(_ key: RedisKey, to newKey: RedisKey, overwrite: Bool = false) async throws {
+        try await requireRedisDriverBox().renameRedisKey(key, to: newKey, overwrite: overwrite)
+    }
+
+    @discardableResult
+    func deleteRedisKeys(_ keys: [RedisKey], asynchronously: Bool = true) async throws -> Int {
+        try await requireRedisDriverBox().deleteRedisKeys(keys, asynchronously: asynchronously)
+    }
+
+    @discardableResult
+    func setRedisExpiration(for key: RedisKey, milliseconds: Int64?) async throws -> Bool {
+        try await requireRedisDriverBox().setRedisExpiration(for: key, milliseconds: milliseconds)
+    }
+
+    func executeRedisCommand(
+        _ command: RedisCommand,
+        analysis suppliedAnalysis: RedisCommandAnalysis? = nil,
+        confirmationGranted: Bool = false
+    ) async throws -> RedisCommandResult {
+        let analysis = try validatedRedisCommandAnalysis(for: command, supplied: suppliedAnalysis)
+        guard analysis.allowsExecution else {
+            throw DatabaseError.operationFailed(
+                analysis.executionPolicy.message ?? "This Redis command is unavailable"
+            )
+        }
+        guard !analysis.requiresConfirmation || confirmationGranted else {
+            throw DatabaseError.operationFailed(
+                analysis.executionPolicy.message ?? "This Redis command requires confirmation"
+            )
+        }
+
+        let driverBox = try requireRedisDriverBox()
+        let startedAt = ContinuousClock.now
+
+        do {
+            let result = try await driverBox.executeRedisCommand(command)
+            queryHistoryService?.recordRedisCommand(
+                analysis: analysis,
+                databaseType: .redis,
+                databaseName: connectedDatabase?.name,
+                executionDurationMs: Int(result.durationMilliseconds.rounded()),
+                wasSuccessful: true
+            )
+            return result
+        } catch {
+            let duration = startedAt.duration(to: .now)
+            let durationMilliseconds = Int(duration.components.seconds * 1_000)
+                + Int(duration.components.attoseconds / 1_000_000_000_000_000)
+            queryHistoryService?.recordRedisCommand(
+                analysis: analysis,
+                databaseType: .redis,
+                databaseName: connectedDatabase?.name,
+                executionDurationMs: durationMilliseconds,
+                wasSuccessful: false,
+                errorMessage: error.localizedDescription
+            )
+            throw error
+        }
+    }
+
+    func executeRedisCommand(
+        _ commandText: String,
+        confirmationGranted: Bool = false
+    ) async throws -> RedisCommandResult {
+        let analysis = try RedisCommandSafety.analyze(commandText)
+        return try await executeRedisCommand(
+            analysis.transportCommand,
+            analysis: analysis,
+            confirmationGranted: confirmationGranted
+        )
+    }
+
+    private func requireRedisDriverBox() throws -> DatabaseDriverBox {
+        guard activeConnection?.databaseType == .redis, let activeDriverBox else {
+            throw DatabaseError.operationFailed("No active Redis connection")
+        }
+        return activeDriverBox
+    }
+
+    private func validatedRedisCommandAnalysis(
+        for command: RedisCommand,
+        supplied: RedisCommandAnalysis?
+    ) throws -> RedisCommandAnalysis {
+        let parsed = try ParsedRedisCommand(
+            arguments: command.arguments.map { RedisCommandToken(bytes: Array($0)) }
+        )
+        if let supplied {
+            guard supplied.command == parsed else {
+                throw DatabaseError.operationFailed("Redis command analysis does not match the command arguments")
+            }
+            return supplied
+        }
+        return RedisCommandSafety.analyze(parsed)
+    }
+
     // MARK: - Document Operations
     /// Exposes the underlying driver actor so prewarm paths can fire DB queries
     /// without going through this @MainActor entry point. Calls into the
@@ -608,7 +742,7 @@ import SwiftUI
         let result: QueryResult
         
         switch connection.databaseType {
-        case .postgres, .supabase, .convex, .mysql, .sqlite:
+        case .postgres, .supabase, .convex, .mysql, .sqlite, .redis:
             result = try await activeDriverBox.findDocuments(
                 in: collectionName,
                 databaseSchema: databaseSchema,
@@ -651,6 +785,8 @@ import SwiftUI
             return MySQLDriver().generateFilterQuery(from: conditions, tableName: tableName)
         case .mongodb:
             // TODO: Implement MongoDB filter generation
+            return ""
+        case .redis:
             return ""
         }
     }

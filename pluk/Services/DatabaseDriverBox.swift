@@ -111,6 +111,51 @@ actor DatabaseDriverBox {
         try await driver.executeRawQuery(query, databaseSchema: databaseSchema)
     }
 
+    func scanRedisKeys(
+        cursor: UInt64,
+        pattern: String?,
+        type: RedisKeyType?,
+        count: Int
+    ) async throws -> RedisScanPage {
+        try await driver.scanRedisKeys(cursor: cursor, pattern: pattern, type: type, count: count)
+    }
+
+    func redisKeyMetadata(for key: RedisKey) async throws -> RedisKeyMetadata {
+        try await driver.redisKeyMetadata(for: key)
+    }
+
+    func redisValue(for key: RedisKey, page: RedisValuePage) async throws -> RedisValue {
+        try await driver.redisValue(for: key, page: page)
+    }
+
+    func updateRedisValue(
+        _ update: RedisValueUpdate,
+        for key: RedisKey,
+        preserveTTL: Bool
+    ) async throws {
+        try await driver.updateRedisValue(update, for: key, preserveTTL: preserveTTL)
+    }
+
+    func renameRedisKey(_ key: RedisKey, to newKey: RedisKey, overwrite: Bool) async throws {
+        try await driver.renameRedisKey(key, to: newKey, overwrite: overwrite)
+    }
+
+    func deleteRedisKeys(_ keys: [RedisKey], asynchronously: Bool) async throws -> Int {
+        try await driver.deleteRedisKeys(keys, asynchronously: asynchronously)
+    }
+
+    func setRedisExpiration(for key: RedisKey, milliseconds: Int64?) async throws -> Bool {
+        try await driver.setRedisExpiration(for: key, milliseconds: milliseconds)
+    }
+
+    func executeRedisCommand(_ command: RedisCommand) async throws -> RedisCommandResult {
+        try await driver.executeRedisCommand(command)
+    }
+
+    func parseRedisCommand(_ commandText: String) async throws -> RedisCommand {
+        try await driver.parseRedisCommand(commandText)
+    }
+
     func getSchema(for collectionName: String, schema: String?) async throws -> DatabaseSchemaResult? {
         try await driver.getSchema(for: collectionName, schema: schema)
     }

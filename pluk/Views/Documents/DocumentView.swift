@@ -44,6 +44,9 @@ class TabContentView: NSView {
         case .mongodb:
             setupMongoDBView()
 
+        case .redis:
+            setupRedisView()
+
         default:
             setupDefaultView()
         }
@@ -71,7 +74,7 @@ class TabContentView: NSView {
             rootView = applyEnvironments(FunctionEditorView())
         case .canvas:
             return
-        case .browse, .aggregate, .schema, .indexes:
+        case .browse, .aggregate, .schema, .indexes, .redisKey, .redisCommand:
             // SQL .browse/.aggregate/.schema/.indexes tabs are routed to
             // TableContentViewController (AppKit) in
             // DocumentViewController.makeTabContentView and never reach here.
@@ -87,9 +90,22 @@ class TabContentView: NSView {
         setContentView(NSHostingView(rootView: rootView))
     }
 
+    private func setupRedisView() {
+        switch tab.type {
+        case .redisKey:
+            setContentView(NSHostingView(rootView: applyEnvironments(RedisKeyDetailView(tab: tab))))
+        case .redisCommand:
+            setContentView(NSHostingView(rootView: applyEnvironments(RedisCommandEditorView(tab: tab))))
+        default:
+            setupDefaultView()
+        }
+    }
+
     private func setupDefaultView() {
         let noSelectionView = NSView()
-        let label = NSTextField(labelWithString: "No collection selected")
+        let label = NSTextField(
+            labelWithString: databaseType == .redis ? "No key selected" : "No collection selected"
+        )
         label.font = NSFont.systemFont(ofSize: 18, weight: .medium)
         label.textColor = NSColor.secondaryLabelColor
         label.alignment = .center

@@ -48,6 +48,8 @@ struct ConnectionDetailsPopover: View {
             return "3306"
         case .mongodb:
             return "27017"
+        case .redis:
+            return "6379"
         }
     }
     
@@ -127,10 +129,17 @@ struct ConnectionDetailsPopover: View {
                     VStack(spacing: 8) {
                         CompactDetailRow(label: "Driver", value: driverWithVersion)
                         
-                        CompactDetailRow(label: databaseType == .convex ? "Environment" : "Environment", value: databaseName)
+                        CompactDetailRow(
+                            label: databaseType == .convex
+                                ? "Environment"
+                                : (databaseType == .redis ? "DB Index" : "Database"),
+                            value: databaseName
+                        )
                         
                         // Only show username for network-based databases
-                        if let username = connection?.username, databaseType != .convex {
+                        if let username = connection?.username,
+                           !username.isEmpty,
+                           databaseType != .convex {
                             CompactDetailRow(label: "Username", value: username)
                         }
                         

@@ -6,7 +6,7 @@
 //
 
 import Testing
-@testable import collection
+@testable import Pluk
 
 struct collectionTests {
 

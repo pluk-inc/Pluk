@@ -500,6 +500,51 @@ struct CachedCollectionWrapper: CollectionWrapper, Codable, Sendable {
         selectedTab = newTab
     }
 
+    /// Opens the command surface appropriate for this connection type.
+    /// Redis does not use SQL-editor tabs, so generic new-tab entry points must
+    /// route to its command workspace instead of creating a dead document tab.
+    func createEditorTab() {
+        if connection.databaseType == .redis {
+            createRedisCommandTab()
+        } else {
+            createSQLEditorTab()
+        }
+    }
+
+    func createRedisKeyTab(keyData: Data, displayName: String) {
+        if let existingTab = tabs.first(where: {
+            $0.type == .redisKey && $0.redisKeyData == keyData
+        }) {
+            selectedTab = existingTab
+            return
+        }
+
+        let newTab = DatabaseTab(
+            name: displayName,
+            type: .redisKey,
+            queryState: .idle
+        )
+        newTab.redisKeyData = keyData
+        tabs.append(newTab)
+        selectedTab = newTab
+    }
+
+    func createRedisCommandTab(withCommand command: String? = nil) {
+        if command == nil, let existingTab = tabs.first(where: { $0.type == .redisCommand }) {
+            selectedTab = existingTab
+            return
+        }
+
+        let newTab = DatabaseTab(
+            name: "Command Editor",
+            type: .redisCommand,
+            queryState: .idle
+        )
+        newTab.initialQuery = command
+        tabs.append(newTab)
+        selectedTab = newTab
+    }
+
     private func recordRecentTable(name: String, schema: String?) {
         guard let dbName = connectedDatabase?.name, !dbName.isEmpty else { return }
         let tableType = collections[dbName]?.first {
